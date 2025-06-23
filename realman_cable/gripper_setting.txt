@@ -1,0 +1,24 @@
+1、列出USB串口设备
+输入: ls /dev/ttyUSB*  
+正常输出: ttyUSB0，如果没有重新插拔一下
+
+2、给当前用户添加串口权限
+sudo usermod -aG dialout $USER
+reboot  # 一定要重启工控机，生效！！！
+groups $USER # 验证是否生效，会输出 test : test dialout sudo
+
+3、安装pyRobotiqGripper库
+python -m pip install pyRobotiqGripper
+
+4、使用：新建脚本文件test_gripper.py
+import pyRobotiqGripper
+gripper = pyRobotiqGripper.RobotiqGripper()
+# gripper.activate() #激活，第一次使用要运行，后面不需要
+# gripper.open() # 全开，255
+# gripper.close() # 全闭，0
+gripper.goTo(100) # 位置
+# position_in_bit = gripper.getPosition()
+# print(position_in_bit)
+# gripper.goTomm(25)
+# position_in_mm = gripper.getPositionmm()
+# print(position_in_mm)
