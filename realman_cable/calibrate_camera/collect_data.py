@@ -22,8 +22,8 @@ jpg_path = "./"
 # 加载预定义的字典
 dict_gen = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
 ###########################################################################################
-cameraMatrix = np.array([[907.6467895507812, 0.0, 651.1138305664062],
-                        [0.0, 906.7631225585938, 381.6347961425781],
+cameraMatrix = np.array([[907.5158081054688, 0.0, 658.6470947265625],
+                        [0.0, 906.7430419921875, 391.1750793457031],
                         [0.0, 0.0, 1.0]],np.float32)
 distCoeffs = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
 
@@ -57,7 +57,7 @@ def run():
 
         print(count)
         ##############################################更改图像来源
-        color_image = rospy.wait_for_message("/right_camera/color/image_raw", Image, timeout=None)
+        color_image = rospy.wait_for_message("/left_camera/color/image_raw", Image, timeout=None)
         color_img = bridge.imgmsg_to_cv2(color_image, "bgr8")
         cv2.imshow("Capture_Video", color_img)  # 窗口显示，显示名为 Capture_Test
         cv2.waitKey(1)
@@ -113,8 +113,8 @@ def run():
 
 if __name__ == '__main__':
     ##############################################################################################
-    # arm = Arm(75, '192.168.99.17') # 左臂
-    arm = Arm(75, '192.168.99.18') # 右臂
+    arm = Arm(75, '192.168.99.17') # 左臂
+    # arm = Arm(75, '192.168.99.18') # 右臂
     
     ##############################################################################################
     arm.Change_Work_Frame('Base')  # 切换到Base坐标系

@@ -1,6 +1,12 @@
 import numpy as np
 
-approaching_numPoints = 500 # 前进阶段的点数
-trans_length = 0.05  # 平移距离
-delta_steps = trans_length / approaching_numPoints # 前半段沿x轴平移的步长
-print(delta_steps)
+point_c = np.array([0,0,2]) # 蓝色的点 c
+point_d = np.array([1,-1,2]) # 两个角点的中点 d
+vector_cd = point_d - point_c # cd
+
+# 用arctan2计算与x轴的夹角，范围[0, 360)
+theta_deg = np.degrees(np.arctan2(vector_cd[1], vector_cd[0]))
+if theta_deg < 0:
+    theta_deg += 360
+
+print("cd与x轴夹角:", theta_deg)

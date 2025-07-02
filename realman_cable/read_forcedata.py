@@ -12,7 +12,7 @@ class ForceSensorRS485:
     START_CMD = b'\xC0\xF7\xF7\xC0'  # 数据开始发送命令
     STOP_CMD = b'\xC0\xF8\xF8\xC0'   # 数据停止发送命令
     
-    def __init__(self, port='/dev/ttyUSB1', baudrate=115200):
+    def __init__(self, port='/dev/ttyUSB2', baudrate=115200):
         """
         初始化RS485传感器连接
         :param port: 串口设备路径
@@ -284,7 +284,7 @@ class ForceSensorRS485:
 
 if __name__ == "__main__":
     # 根据实际设备修改端口号
-    SENSOR_PORT = '/dev/ttyUSB1'  # Linux
+    SENSOR_PORT = '/dev/ttyUSB2'  # Linux
     # SENSOR_PORT = 'COM3'          # Windows
     
     print("启动六维力传感器频率测试")

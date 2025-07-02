@@ -470,7 +470,7 @@
       link="tool_hand" />
   </joint>
   <link
-    name="robotiq">
+    name="right_robotiq">
     <inertial>
       <origin
         xyz="0.0 0.0 0.0"
@@ -478,7 +478,7 @@
     </inertial>
   </link>
   <joint  
-    name="joint_robotiq"
+    name="right_joint_robotiq"
     type="fixed">
     <origin
       xyz="0 0 0.22032"
@@ -486,7 +486,26 @@
     <parent
       link="Link7" />
     <child
-      link="robotiq" />
+      link="right_robotiq" />
+  </joint>
+  <link
+    name="left_robotiq">
+    <inertial>
+      <origin
+        xyz="0.0 0.0 0.0"
+        rpy="0 0 0" />
+    </inertial>
+  </link>
+  <joint  
+    name="left_joint_robotiq"
+    type="fixed">
+    <origin
+      xyz="0 0 0.19182"
+      rpy="0 0 2.8780" />
+    <parent
+      link="Link7" />
+    <child
+      link="left_robotiq" />
   </joint>
   <link
     name="f_sensor">
