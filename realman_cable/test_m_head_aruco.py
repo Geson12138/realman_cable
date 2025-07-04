@@ -52,8 +52,8 @@ def filter_pose(pose):
 def get_target_xyz(trans,markid,markerwidth):
     rospy.init_node('get_wrench_images',anonymous=True)
     dict_gen = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_1000)
-    cameraMatrix = np.array([[649.5870361328125, 0.0,  640.7506103515625],
-                            [0.0, 648.4265747070312, 359.3799133300781],
+    cameraMatrix = np.array([[389.541259765625, 0.0, 320.45037841796875],
+                            [0.0, 388.84527587890625, 239.62796020507812],
                             [0.0, 0.0, 1.0]],np.float32)
     distCoeffs = np.array([-0.054430413991212845, 0.06396076083183289, -0.00016922301438171417, 0.000722995144315064, -0.021027561277151108])
 

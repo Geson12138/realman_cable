@@ -78,22 +78,12 @@ if __name__=='__main__':
     
     _, cur_joint, ee_pose, _, _ = arm.Get_Current_Arm_State()
     print(f"cur_joint: {cur_joint}")
-
+    print(f"ee_pose: {ee_pose}")
+    
     cur_pose_matrix = SE3.Trans(ee_pose[0],ee_pose[1],ee_pose[2])* SE3.RPY(ee_pose[3],ee_pose[4],ee_pose[5])
     bias_vector_inBase = cur_pose_matrix * bias_vector_inTcp
-    des_joint = arm_inverse_kine(pykin, cur_joint, bias_vector_inBase.A)
-
-    arm.Movej_Cmd(des_joint,10)
-
-    input("enter to continue")
-    
-    bias_vector_inTcp = SE3.Trans(0.02,0.0,0.0)* SE3.RPY(0.0,0.0,0.0)
-    
-    _, cur_joint, ee_pose, _, _ = arm.Get_Current_Arm_State()
-    print(f"cur_joint: {cur_joint}")
-
-    cur_pose_matrix = SE3.Trans(ee_pose[0],ee_pose[1],ee_pose[2])* SE3.RPY(ee_pose[3],ee_pose[4],ee_pose[5])
-    bias_vector_inBase = cur_pose_matrix * bias_vector_inTcp
+    print(f"bias_vector_inBase: {bias_vector_inBase}")
+          
     des_joint = arm_inverse_kine(pykin, cur_joint, bias_vector_inBase.A)
 
     arm.Movej_Cmd(des_joint,10)

@@ -75,9 +75,12 @@ def gripper_init():
     AUTO_DETECTION="auto"
     SLAVEADDRESS = 9
     ports=serial.tools.list_ports.comports()
-    portName=None
     for port in ports:
         try:
+            if port.serial_number == "DAA5HFG8":
+                left_gripper_port = port.device
+            elif port.serial_number == "DAA5H8OB":
+                right_gripper_port = port.device
             # Try opening the port
             ser = serial.Serial(port.device,BAUDRATE,BYTESIZE,PARITY,STOPBITS,TIMEOUT)
             
@@ -94,12 +97,14 @@ def gripper_init():
             #Check if position request eco reflect the requested position
             if posRequestEchoReg3 != 100:
                 raise Exception("Not a gripper")
-            portName=port.device
+
             del device
 
             ser.close()  # Close the port
         except:
             pass  # Skip if port cannot be opened
+
+    return left_gripper_port, right_gripper_port
 
 # 全局变量储存插口pose
 headcam_all_hole = PoseArray()
@@ -164,9 +169,9 @@ def rightcam_usb_hole_callback(msg):
         msg.poses[1].position 是插头的(x, y, z)
     """ 
 
-    global recent_peg_positions,recent_hole_positions,peg_avg_position,hole_avg_position
+    global recent_peg_positions, recent_hole_positions, peg_avg_position, hole_avg_position, flag_vision_searchHole
 
-    if len(msg.poses) == 2: # 必须要保证同时给出两个红框
+    if len(msg.poses) == 2 and flag_vision_searchHole: # 必须要保证同时给出两个红框 and 视觉搜孔标志为1
 
         if (msg.poses[0].position.x == 0 and msg.poses[0].position.y == 0 and msg.poses[0].position.z == 0) \
         or (msg.poses[1].position.x == 0 and msg.poses[1].position.y == 0 and msg.poses[1].position.z == 0):
@@ -184,15 +189,12 @@ def rightcam_usb_hole_callback(msg):
             recent_peg_positions.append(peg_position)
             recent_hole_positions.append(hole_position)
 
-            if len(recent_peg_positions) > 20:
-                recent_peg_positions.pop(0)  # 移除最早的
-            if len(recent_hole_positions) > 20:
-                recent_hole_positions.pop(0)  # 移除最早的    
+            if len(recent_peg_positions) >= 25 and len(recent_hole_positions) >= 25:
 
-            # 计算平均值
-            peg_avg_position = np.mean(recent_peg_positions, axis=0)
-            hole_avg_position = np.mean(recent_hole_positions, axis=0)
-    
+                peg_avg_position = np.mean(recent_peg_positions, axis=0) # 计算平均值
+                hole_avg_position = np.mean(recent_hole_positions, axis=0) # 计算平均值
+                flag_vision_searchHole = False
+
     else:
         pass
 
@@ -290,7 +292,8 @@ leftArm_force_zero = np.zeros(6)
 def arm_le_clear_force():
 
     global leftArm_force_zero
-    _, _, leftArm_force_zero = update_arm_left_state()
+    _, _, get_leftArm_force = update_arm_left_state()
+    leftArm_force_zero += get_leftArm_force
 
 def read_forcedata(sensor):
 
@@ -375,7 +378,7 @@ def force_data_zero():
     Func: 力传感器数据清零
     '''
     global force_zero_point, calib_force_data
-    force_zero_point = calib_force_data.copy()
+    force_zero_point += calib_force_data.copy()
 
 def pose_add(pose1, pose2):
 
@@ -524,7 +527,7 @@ def admittance_controller(robot):
     '''
     Func: 阻抗控制器, 用于机械臂外环控制, 控制周期25hz
     '''
-    global num_joints, flag_enter_tcp2canbus, calib_force_data, p_end_list, peg_avg_position, hole_avg_position
+    global num_joints, flag_enter_tcp2canbus, calib_force_data, p_end_list, peg_avg_position, hole_avg_position, flag_vision_searchHole
 
     # 设置admittance control阻抗控制器参数
     mass = [300.0, 300.0, 300.0, 50.0, 50.0, 50.0]  # 定义惯性参数
@@ -560,11 +563,12 @@ def admittance_controller(robot):
     judge_force_threshold = 0.0 # 初始化力传感器受力判断阈值, Tcp坐标系下的受力
     judge_moment_threshold = 0.0 # 初始化力传感器受力矩判断阈值, Tcp坐标系下的受力
 
-    # input("enter to continue 前进")
 
     '''
     前进阶段
     '''
+    # input("enter to continue 前进")
+
     approaching_numPoints = 300 # 前进阶段的点数
     trans_length = 0.15  # 前进距离
     delta_steps = trans_length / approaching_numPoints # 前进的每一步的步长
@@ -573,7 +577,7 @@ def admittance_controller(robot):
     trans_vector_inTcp = np.array([delta_steps, 0.0, 0.0]).reshape(3,1) # Tcp坐标系下的前进位移向量
     trans_vector_inBase = (ee_rotateMatrix * trans_vector_inTcp ).flatten() # 转换到Base坐标系下的前进位移向量
     force2tcp = SE3.Trans(0.0, 0.0, -0.199) * SE3.RPY(1.57, 2.356, 0.0, order='xyz') # 从末端工具坐标系转换到力传感器坐标系
-    approaching_control_period = 0.050 # 透传周期50ms
+    approaching_control_period = 0.045 # 透传周期45ms
     plug_in_state[1] = 1 # 前进阶段标志位为1
 
     for i_0 in range(approaching_numPoints):
@@ -610,28 +614,46 @@ def admittance_controller(robot):
         else:
             time.sleep(approaching_control_period - elapsed_time)
 
-
     time.sleep(1) # 等待稳定
     _, pose_r, _ = update_arm_ri_state()
     p_end_pos = np.array((pose_r[:3]), dtype=float) # 更新当前末端位置 in m
     p_end_ori = np.array((pose_r[3:]), dtype=float) # 更新当前末端姿态 in rad
 
-    # input("enter to continue 搜孔")
 
     '''
     视觉引导搜孔阶段
     '''
-    searching_phase = True # 搜孔阶段标志位
-    searching_numPoints = 3000 # 搜孔阶段的点数
-    peg_avg_position = np.array(peg_avg_position).flatten()
-    hole_avg_position = np.array(hole_avg_position).flatten()
-    peg_pos_inTcp = arm_cam2robotiq_right @ np.array([peg_avg_position[0], peg_avg_position[1], peg_avg_position[2], 1.0]).reshape(4, 1)
-    hole_pos_inTcp = arm_cam2robotiq_right @ np.array([hole_avg_position[0], hole_avg_position[1], hole_avg_position[2], 1.0]).reshape(4, 1)
-    vector_peg2hole_inTcp = np.abs(np.array(hole_pos_inTcp - peg_pos_inTcp)[:3].reshape(3, 1)) # (3,1)
-    logger.info(f"vector_peg2hole_inTcp:{vector_peg2hole_inTcp}")
+    # input("enter to continue 搜孔")
+
+    flag_vision_searchHole = True # 视觉搜孔标志置为1
+    searching_numPoints = 4000 # 搜孔阶段的点数
+
+    while not rospy.is_shutdown():
+
+        if flag_vision_searchHole: # 等待视觉回调函数计算平均值
+            continue
+
+        else:
+
+            peg_avg_position = np.array(peg_avg_position).flatten()
+            hole_avg_position = np.array(hole_avg_position).flatten()
+            peg_pos_inTcp = arm_cam2robotiq_right @ np.array([peg_avg_position[0], peg_avg_position[1], peg_avg_position[2], 1.0]).reshape(4, 1)
+            hole_pos_inTcp = arm_cam2robotiq_right @ np.array([hole_avg_position[0], hole_avg_position[1], hole_avg_position[2], 1.0]).reshape(4, 1)
+            vector_peg2hole_inTcp = np.abs(np.array(hole_pos_inTcp - peg_pos_inTcp)[:3].reshape(3, 1)) # (3,1)
+            logger.info(f"vector_peg2hole_inTcp:{vector_peg2hole_inTcp}")
+
+            keyboard = input("请确认识别结果是否正确, 正确直接enter, 错误则e+enter")
+
+            if keyboard == 'e':
+                flag_vision_searchHole = True  # 重新识别20次，计算平均值
+            else:
+                break # 跳出循环，继续后续流程
+
+        time.sleep(0.05)
+
     vector_peg2hole_inTcp[0] *= 0.40 # x往里走的距离减小，减小的话往里的力也会小
-    vector_peg2hole_inTcp[1] *= 0.70 # y 越大越往左
-    vector_peg2hole_inTcp[2] *= 1.05 # z往上走的距离减小
+    vector_peg2hole_inTcp[1] *= 0.50 # y 越大越往左
+    vector_peg2hole_inTcp[2] *= 1.00 # z往上走的距离减小
     norm = np.linalg.norm(vector_peg2hole_inTcp) # 计算模长
     if norm == 0:
         unit_vector_inTcp = np.zeros_like(vector_peg2hole_inTcp)
@@ -641,7 +663,7 @@ def admittance_controller(robot):
     ee_rotateMatrix = SO3.RPY(pose_r[3], pose_r[4], pose_r[5])  # 生成3D旋转对象(0.0, 0.0, 0.0)
     trans_vector_inBase = (ee_rotateMatrix * trans_vector_inTcp ).flatten() # 转换到Base坐标系下的前进位移向量
     trans_vector_inBase = np.array(trans_vector_inBase, dtype=float)
-    searching_control_period = 0.050 # 透传周期50ms 
+    searching_control_period = 0.045 # 透传周期45ms 
     judge_force_threshold = 7 # 搜孔阶段受力判断阈值, Tcp坐标系下的受力
 
     for i_1 in range(searching_numPoints):
@@ -666,7 +688,6 @@ def admittance_controller(robot):
         logger.info(f'judge_force: {judge_force}')
 
         if judge_force >= judge_force_threshold:
-            searching_phase = False # 搜孔阶段接触
             logger.info("搜孔阶段结束，进入插孔第一阶段")
             plug_in_state[2] = 0 # 搜孔阶段结束
             plug_in_state[3] = 1 # 第一阶段开始
@@ -761,7 +782,7 @@ def admittance_controller(robot):
 
             judge_force_threshold = -20 # 插孔的第三阶段受力判断阈值, Tcp坐标系下的受力
 
-            trans_vector_inTcp = np.array([0.15/1000, 0.0, 0.0]).reshape(3,1) # Tcp坐标系下的前进位移向量
+            trans_vector_inTcp = np.array([0.15/1000, 0.0, 0.05/1000]).reshape(3,1) # Tcp坐标系下的前进位移向量
             ee_rotateMatrix = SO3.RPY(ee_ori_rpy_rad[0], ee_ori_rpy_rad[1], ee_ori_rpy_rad[2])  # 生成3D旋转对象(0.0, 0.0, 0.0)
             trans_vector_inBase = (ee_rotateMatrix * trans_vector_inTcp ).flatten() # 转换到Base坐标系下的前进位移向量
             p_end_pos = p_end_pos + trans_vector_inBase # x往前走
@@ -1014,9 +1035,10 @@ def arm_inverse_kine(pykin_arm,refer_joints,target_pose):
 #     return pose_out
 
 def get_target_xyz_head_aruco(trans,markid,markerwidth,count=1):
+
     dict_gen = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_1000)
-    cameraMatrix = np.array([[649.5870361328125, 0.0,  640.7506103515625],
-                            [0.0, 648.4265747070312, 359.3799133300781],
+    cameraMatrix = np.array([[389.541259765625, 0.0, 320.45037841796875],
+                            [0.0, 388.84527587890625, 239.62796020507812],
                             [0.0, 0.0, 1.0]],np.float32)
     distCoeffs = np.array([-0.054430413991212845, 0.06396076083183289, -0.00016922301438171417, 0.000722995144315064, -0.021027561277151108])
 
@@ -1120,9 +1142,9 @@ def cable_plugging_pre(robot):
     input("enter to continue")
     
     refer_joints = [52.34, -79.31, -49.43, -26.93, -44.75, -93.21, 128.53]
-    put_Tx = np.array( [[ 0.04954775, -0.99759491, -0.04847087,  0.15127241],
-                        [-0.25921172, -0.05971158,  0.96397293, -0.02709662],
-                        [-0.96454875, -0.03519847, -0.26154687,  0.02281126],
+    put_Tx = np.array( [[ 0.03095872, -0.99401906, -0.10472664,  0.14661507],
+                        [-0.24970449, -0.10914618,  0.96215112, -0.02892161],
+                        [-0.96782706, -0.00363625, -0.25159005,  0.01354862+0.01],
                         [ 0.,          0.,          0.,          1.        ]])
 
     trans = np.array([0, 0, 0])
@@ -1148,19 +1170,24 @@ def get_target_xyz_le():
     
     global leftcam_usb_plug
     
-    proportion_k = 1 # 计算抓取点c，C- B = K* (B- A)
     while not rospy.is_shutdown():
+
         if (leftcam_usb_plug.poses[0].position.x == 0 and leftcam_usb_plug.poses[0].position.y == 0 and leftcam_usb_plug.poses[0].position.z == 0) \
         or (leftcam_usb_plug.poses[1].position.x == 0 and leftcam_usb_plug.poses[1].position.y == 0 and leftcam_usb_plug.poses[1].position.z == 0):
             logger.info("识别失败")
         else:
-            break
+            point_a = np.array([leftcam_usb_plug.poses[0].position.x,leftcam_usb_plug.poses[0].position.y,leftcam_usb_plug.poses[0].position.z])
+            point_b = np.array([leftcam_usb_plug.poses[1].position.x,leftcam_usb_plug.poses[1].position.y,leftcam_usb_plug.poses[1].position.z])
+            logger.info(f"抓取插头的point_a: {point_a}")
+            logger.info(f"抓取插头的point_b: {point_b}")
+            keyboard = input("请确认识别结果是否正确, 正确直接enter, 错误则e+enter")
+            if keyboard == 'e':
+                continue  # 重新识别
+            else:
+                break # 跳出循环，继续后续流程
         time.sleep(0.01)
-    point_a = np.array([leftcam_usb_plug.poses[0].position.x,leftcam_usb_plug.poses[0].position.y,leftcam_usb_plug.poses[0].position.z])
-    point_b = np.array([leftcam_usb_plug.poses[1].position.x,leftcam_usb_plug.poses[1].position.y,leftcam_usb_plug.poses[1].position.z])
-    logger.info(f"抓取插头的point_a: {point_a}")
-    logger.info(f"抓取插头的point_b: {point_b}")
     
+    proportion_k = -0.5 # 计算抓取点c，C- B = K* (B- A)
     point_c = point_b + proportion_k* (point_b- point_a)
     cam_graspPoint = np.ones(4); cam_graspPoint[:3] = point_c
     vector_pointBA = point_a - point_b
@@ -1168,7 +1195,6 @@ def get_target_xyz_le():
     cos_theta = np.dot(vector_pointBA, x_axis) / (np.linalg.norm(vector_pointBA) * np.linalg.norm(x_axis))
     theta_rad = np.arccos(np.clip(cos_theta, -1.0, 1.0))
     theta_deg = np.degrees(theta_rad)
-    # logger.info("BA与x轴夹角:", theta_deg)
     pose_out = np.eye(4)
     pose_out[0,3] = point_c[0]; pose_out[1,3] = point_c[1]; pose_out[2,3] = point_c[2]
     _, _, pose_l, _, _ = arm_le.Get_Current_Arm_State()
@@ -1176,8 +1202,6 @@ def get_target_xyz_le():
     ee2base_transform_matrix[:3, 3] = [pose_l[0], pose_l[1], pose_l[2]]
     ee2base_transform_matrix[:3, :3] = transform_utils.get_matrix_from_rpy([pose_l[3],pose_l[4],pose_l[5]])
     pose_out = ee2base_transform_matrix @ arm_cam2robotiq_left @ pose_out
-    # logger.info('base下目标位置:',pose_out[:3,3])
-    # logger.info('当前base下目标的旋转矩阵',pose_out)
 
     return pose_out, theta_deg
 
@@ -1192,8 +1216,6 @@ def cable_pick(robot):
     pick_pre_ri = [-0.64, 10.07, 7.63, -35.83, -4.98, -85.54, 26.24]
     dual_arm_move(pick_pre_le,pick_pre_ri, 30)
 
-    input("enter to 识别插头关键点")
-
     refer_joints = [-40.84, 85.74, 78.23, 64.48, 17.09, 63.83, -123.28]
     gripper2base_T = ([[ 0.47398583,  0.87794486,  0.0674556 ],
                        [-0.08185094, -0.03234561,  0.99611956],
@@ -1206,10 +1228,9 @@ def cable_pick(robot):
     put_target[2][3] += 0.03 # z+=水平朝左
     arm_joints = arm_inverse_kine(pykin_le,refer_joints,put_target)
     arm_joints[6] += (90 - theta_deg)
-    input("enter to 移动抓取插头")
     arm_le.Movej_Cmd(arm_joints,15) # 移动到抓取点
     gripper_le.goTo(255) # 夹爪闭合
-    time.sleep(1)
+    time.sleep(0.5)
     arm_le.Movej_Cmd(pick_pre_le,30) # 抓起来线缆
 
 def get_target_xyz_ri():
@@ -1224,24 +1245,35 @@ def get_target_xyz_ri():
     '''
 
     global rightcam_usb_pose
-    logger.info(f"rightcam_usb_pose: {rightcam_usb_pose}")
+
     while not rospy.is_shutdown():
+
         if (rightcam_usb_pose.poses[0].position.x == 0 and rightcam_usb_pose.poses[0].position.y == 0 and rightcam_usb_pose.poses[0].position.z == 0) \
         or (rightcam_usb_pose.poses[1].position.x == 0 and rightcam_usb_pose.poses[1].position.y == 0 and rightcam_usb_pose.poses[1].position.z == 0) \
         or (rightcam_usb_pose.poses[2].position.x == 0 and rightcam_usb_pose.poses[2].position.y == 0 and rightcam_usb_pose.poses[2].position.z == 0):
+            
             logger.info("识别失败")
         else:
-            break
+
+            point_a = np.array([rightcam_usb_pose.poses[0].position.x,rightcam_usb_pose.poses[0].position.y,rightcam_usb_pose.poses[0].position.z]) # 两个角点之一 a
+            point_b = np.array([rightcam_usb_pose.poses[1].position.x,rightcam_usb_pose.poses[1].position.y,rightcam_usb_pose.poses[1].position.z]) # 两个角点之一 b 
+            point_c = np.array([rightcam_usb_pose.poses[2].position.x,rightcam_usb_pose.poses[2].position.y,rightcam_usb_pose.poses[2].position.z]) # 蓝色的点 c
+            point_mid = (point_a+ point_b)/ 2 # 两个角点的中点 d
+            vector_cd = point_mid - point_c # cd
+            # 用arctan2计算与x轴的夹角，范围[0, 360)
+            theta_deg = np.degrees(np.arctan2(vector_cd[1], vector_cd[0]))
+            rotate_angle = theta_deg - 360 if theta_deg > 180 else theta_deg
+            deflect_angle = 90 - theta_deg # 将USB插头转正需要的偏转角
+
+            logger.info(f"USB插头cd向量与x轴的偏转角: {rotate_angle}")
+            logger.info(f"将USB插头转正需要的偏转角: {deflect_angle}")
+
+            keyboard = input("请确认识别结果是否正确, 正确直接enter, 错误则e+enter")
+            if keyboard == 'e':
+                continue  # 重新识别
+            else:
+                break # 跳出循环，继续后续流程
         time.sleep(0.01)
-    point_a = np.array([rightcam_usb_pose.poses[0].position.x,rightcam_usb_pose.poses[0].position.y,rightcam_usb_pose.poses[0].position.z]) # 两个角点之一 a
-    point_b = np.array([rightcam_usb_pose.poses[1].position.x,rightcam_usb_pose.poses[1].position.y,rightcam_usb_pose.poses[1].position.z]) # 两个角点之一 b 
-    point_c = np.array([rightcam_usb_pose.poses[2].position.x,rightcam_usb_pose.poses[2].position.y,rightcam_usb_pose.poses[2].position.z]) # 蓝色的点 c
-    point_mid = (point_a+ point_b)/ 2 # 两个角点的中点 d
-    vector_cd = point_mid - point_c # cd
-    # 用arctan2计算与x轴的夹角，范围[0, 360)
-    theta_deg = np.degrees(np.arctan2(vector_cd[1], vector_cd[0]))
-    rotate_angle = theta_deg - 360 if theta_deg > 180 else theta_deg
-    deflect_angle = 90 - theta_deg # 将USB插头转正需要的偏转角
 
     return rotate_angle,deflect_angle
 
@@ -1256,20 +1288,18 @@ def shifting_hands():
     step1_ri = [3.06, -59.49, 6.16, -36.58, -6.35, -87.42, 32.14]
     dual_arm_move(step1_le,step1_ri,30)
     time.sleep(0.5)
-    # input("enter to continue")
+
     gripper_le.goTo(213) # 左爪松一点
     gripper_ri.goTo(255) # 右爪闭合
     
-    #目前是固定动作，可改成力控
     '''
     右臂抓着线缆往下拽, 拽的过程中检测左臂的六维力数据
     '''
     joint_r, pose_r, _ = update_arm_ri_state() 
     p_end_pos = np.array((pose_r[:3])) # 更新当前右臂末端位置 in m
     p_end_ori = np.array((pose_r[3:])) # 更新当前右臂末端姿态 in rad
-
     arm_le_clear_force() # 左臂清空六维力数据
-    drag_force_threshold  = 9 # 左臂拉拽力的阈值
+    drag_force_threshold  = 7.8 # 左臂拉拽力的阈值
 
     while not rospy.is_shutdown():
 
@@ -1283,20 +1313,19 @@ def shifting_hands():
         if drag_force_le[1] > drag_force_threshold: # 当拉拽力大于拉拽力阈值时，停止拉拽
             break
     
-    # input("enter to continue")
-
     gripper_le.goTo(255) # 左爪夹紧
     gripper_ri.goTo(0) # 右爪打开
-
+    
+    _, joint_le, _, _, _ = arm_le.Get_Current_Arm_State()
+    _, joint_ri, _, _, _ = arm_ri.Get_Current_Arm_State()
+    dual_arm_move(joint_le,joint_ri,30) #保证下一步左右臂同步运动
+    
     front_or_back_le = [-37.5, 91.49, 58.99, 18.22, 23.48, 107.82, -0.9]
     front_or_back_ri = [-29.67, -78.19, 52.65, -38.93, -53.13, -77.53, 25.8]
     dual_arm_move(front_or_back_le,front_or_back_ri,30)
 
     rotate_angle,deflect_angle = get_target_xyz_ri() # USB插头cd向量与x轴的偏转角,将USB插头转正需要的偏转角
-    logger.info(f"USB插头cd向量与x轴的偏转角: {rotate_angle}")
-    logger.info(f"将USB插头转正需要的偏转角: {deflect_angle}")
     
-    input("input enter to continue move")
     # 需根据识别角度调整最后一个关节角
     step3_ri = [-25.23, -86.41, 52.63, -36.0, -58.63, -73.26, 29.93]
     step3_ri[6] += rotate_angle
@@ -1339,7 +1368,8 @@ if __name__ == '__main__':
     # =====================ROS=============================
     rospy.init_node('force_control_realman')
     rospy.Subscriber("/head_camera_predict_pointXYZ", PoseArray, headcam_all_hole_callback) # 移动，头部相机看所有的插孔
-    rospy.Subscriber("/right_camera_predict_pointXYZ", PoseArray, rightcam_usb_hole_callback) # 插接，右臂相机看USB插孔
+    flag_vision_searchHole = False # 视觉搜孔标志
+    rospy.Subscriber("/right_camera_predict_pointXYZ", PoseArray, rightcam_usb_hole_callback) # 搜孔，右臂相机看USB插孔
     rospy.Subscriber("/left_camera_predict_usb_pointXYZ", PoseArray, leftcam_usb_plug_callback) # 抓取，左臂相机看USB插头
     rospy.Subscriber("/right_camera_predict_handusb_pointXYZ", PoseArray, rightcam_usb_pose_callback) # 倒手，右臂相机看USB正反
     kin_inverse = rospy.ServiceProxy('/kin_inverse', KinInverse)
@@ -1367,15 +1397,13 @@ if __name__ == '__main__':
     # 关闭左臂udp主动上报, ，force_coordinate=0 为传感器坐标系, 1 为当前工作坐标系, 2 为当前工具坐标系
     arm_le.Set_Realtime_Push(enable=True, cycle=1, force_coordinate=0)
     arm_ri.Set_Realtime_Push(enable=True, cycle=1, force_coordinate=0)
-
     arm_udp_status = RealtimePush_Callback(arm_udp_status)
     arm_le.Realtime_Arm_Joint_State(arm_udp_status)
     arm_ri.Realtime_Arm_Joint_State(arm_udp_status)
-    
-    # 初始化夹爪
-    gripper_init()
-    left_gripper_port = "/dev/ttyUSB1"
-    right_gripper_port = "/dev/ttyUSB0"
+    # =======================================================
+
+    # =====================初始化夹爪========================
+    left_gripper_port, right_gripper_port = gripper_init()
     gripper_le = pyRobotiqGripper.RobotiqGripper(left_gripper_port)
     gripper_ri = pyRobotiqGripper.RobotiqGripper(right_gripper_port)
     gripper_le.goTo(0) #全开
