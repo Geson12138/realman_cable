@@ -284,7 +284,7 @@ class ForceSensorRS485:
 
 if __name__ == "__main__":
     # 根据实际设备修改端口号
-    SENSOR_PORT = '/dev/ttyUSB2'  # Linux
+    SENSOR_PORT = '/dev/ttyUSB1'  # Linux
     # SENSOR_PORT = 'COM3'          # Windows
     
     print("启动六维力传感器频率测试")

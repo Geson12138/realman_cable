@@ -16,9 +16,11 @@ def gripper_init():
         try:
             print(f"port.serial_number: {port.serial_number}")
             if port.serial_number == "DAA5HFG8":
-                left_gripper_port = port.device
-            elif port.serial_number == "DAA5H8OB":
                 right_gripper_port = port.device
+            elif port.serial_number == "DAA5H8OB":
+                left_gripper_port = port.device
+            elif port.serial_number == "B002XFTO":
+                force_sensor_port = port.device
             # Try opening the port
             ser = serial.Serial(port.device,BAUDRATE,BYTESIZE,PARITY,STOPBITS,TIMEOUT)
 
@@ -44,13 +46,13 @@ def gripper_init():
 
 left_gripper_port, right_gripper_port = gripper_init()
 gripper_le = pyRobotiqGripper.RobotiqGripper(left_gripper_port)
-gripper_le.goTo(0) #全开
-# gripper_le.goTo(255)
+# gripper_le.goTo(0) #全开
+gripper_le.goTo(255)
 # gripper_le.goTo(213) # 左爪松一点
-
+# input()
 gripper_ri = pyRobotiqGripper.RobotiqGripper(right_gripper_port)
-gripper_ri.goTo(0) #全开
-# gripper_ri.goTo(255)
+# gripper_ri.goTo(0) #全开
+gripper_ri.goTo(50)
 
 
 # gripper.activate() # 激活，第一次使用要运行，后面不需要

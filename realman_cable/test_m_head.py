@@ -22,90 +22,6 @@ from srv._ChakouXYZ import *
 from include.predefine_pose import *
 from geometry_msgs.msg import PoseArray
 
-class ServoUtils:
-    def __init__(self) -> None:
-        hot = '/dev/ttyUSB0'
-        bps = 115200
-        timex = 0.1
-        self.ser = serial.Serial(hot, bps, timeout=timex)
-        self.angle1 = 0
-        self.angle2 = 0
-        
-
-    def read_angle(self):
-        
-        return self.angle1, self.angle2
-        
-        
-    def write_angle(self, angle1, angle2):
-        # angle = int(angle/0.18)
-        self.angle1 = angle1
-        self.angle2 = angle2
-        angle1 = 1500+int(angle1/0.09)
-        angle2 = 1500+int(angle2/0.09)
-        # if id == 1:
-        if angle1<1200:
-            angle1 = 1200
-        if angle1>2000:
-            angle1 = 2000
-        
-        if angle2<500:
-            angle2 = 500
-        if angle2>2500:
-            angle2 = 2500
-            # hex_angle = hex(angle)
-        # print('dasdda')
-        command = '{#000P'+str(angle1)+'T0100!#015P'+str(angle2)+'T0100!}'
-        command = command.encode('utf-8')
-        self.ser.write(command)
-
-    def move_angle(self, move_angle1, move_angle2):
-        if move_angle1 == 0 and move_angle2==0:
-            return
-        try:
-            current_angle_1, current_angle_2 = self.read_angle()
-            target_angle_1, target_angle_2 = current_angle_1+move_angle1, current_angle_2+move_angle2
-            print('target: ',target_angle_1, target_angle_2)
-            self.write_angle(target_angle_1, target_angle_2)
-        except Exception:
-            print('servo error!')
-
-# a=ServoUtils()
-
-# try:
-#     # print(a.read_angle(1))
-#     # print(a.read_angle(2))
-#     a.write_angle(0,-20)
-#     # time.sleep(1)
-#     # a.move_angle(30,30)
-#     # a.write_angle(2,90)
-#     print(a.read_angle())
-#     # print(a.read_angle(2))
-#     # print(s.read_angle(1))
-# except Exception as e:
-#     a.ser.close()
-#     print(e)
-
-# 手眼标定矩阵
-
-
-# T_camera2leftbase = [[-0.00775612, -0.32200265,  0.94670699,  0.15620742],
-#                     [-0.00348822,  0.94673842,  0.32198477, -0.19900207],
-#                     [-0.99996384, -0.00080497, -0.00846623, -0.01890053],
-#                     [ 0.,          0.,          0.,          1.        ]]
-
-
-# T_camera2rightbase = [[-0.01736682,  0.36009764, -0.93275296, -0.1610298 ],
-#                     [ 0.00929465,  0.93291149,  0.35998578, -0.20111395],
-#                     [ 0.99980598, -0.0024178,  -0.01954868, -0.00523836],
-#                     [ 0.,          0.,          0.,          1.        ]]
-
-
-#滤波处理
-def filter_pose(pose):
-    pose = np.apply_along_axis(savgol_filter,axis=1,arr=pose,window_length=5,polyorder=2)
-    return pose
-
 point6_pose = PoseArray()
 
 def point6_pose_callback(msg):
@@ -115,13 +31,12 @@ def point6_pose_callback(msg):
 def get_target_xyz():
     global point6_pose
     pose_out = np.eye(4)
-    # chakou_position_handle = rospy.ServiceProxy('chakou_predict', ChakouXYZ)
-    # pose_out[0,3] = chakou_position_handle().point2[0]
-    # pose_out[1,3] = chakou_position_handle().point2[1]
-    # pose_out[2,3] = chakou_position_handle().point2[2]
-    pose_out[0,3] = point6_pose.poses[5].position.x
-    pose_out[1,3] = point6_pose.poses[5].position.y
-    pose_out[2,3] = point6_pose.poses[5].position.z
+    rpy = np.array(point6_pose.poses.orientation.x,point6_pose.poses.orientation.y,point6_pose.poses.orientation.z)
+    rotation_matrix = np.array(transform_utils.get_matrix_from_quaternion(rpy))
+    pose_out[:3,:3] = rotation_matrix
+    pose_out[0,3] = point6_pose.poses.position.x
+    pose_out[1,3] = point6_pose.poses.position.y
+    pose_out[2,3] = point6_pose.poses.position.z
     print(pose_out)
     ################################################################
     # pose_put = head_cam2base_left @ pose_put
@@ -151,7 +66,7 @@ def get_po_maxtr(t,euler):
 if __name__ == '__main__':
     rospy.init_node('test_m0')
     #####################################################################
-    rospy.Subscriber("/head_camera_predict_pointXYZ", PoseArray, point6_pose_callback)
+    rospy.Subscriber("/head_camera_predict_euler_t", PoseArray, point6_pose_callback)
 
 
     #---------------------连接机器人----------------------
@@ -166,17 +81,6 @@ if __name__ == '__main__':
     arm_le.Change_Work_Frame('Base')
     arm_ri.Change_Work_Frame('Base')
 
-    # 回到home
-    arm_le.Set_Hand_Speed(200)
-    arm_ri.Set_Hand_Speed(200)
-    arm_le.Set_Hand_Force(500)
-    arm_ri.Set_Hand_Force(500)
-    # arm_ri.Set_Hand_Angle([1000, 1000, 1000, 1000, 1000, 1000])
-    #-----------------------------初始--------------------------
-
-    # arm_le.Set_Hand_Angle([1000,1000,1000,1000,1000,0])
-    #-------------------一次视觉识别
-    time.sleep(3)
     tran1 = SE3.Trans(np.array([0, 0, 0]))
 
     input("开始示教计算")

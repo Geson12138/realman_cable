@@ -81,7 +81,8 @@ def get_target_xyz(trans,markid,markerwidth):
         if markerIds is not None:
             
             rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(markerCorners, markerwidth, cameraMatrix, distCoeffs)
-            print('tvecs',tvecs)
+            print(f'旋转：{rvecs}')
+            print(f'平移：{tvecs}')
             for rvec_, tvec_ in zip(rvecs, tvecs):
                 frame_axes = cv2.drawFrameAxes(color_img, cameraMatrix, distCoeffs, rvec_, tvec_, 1)
             

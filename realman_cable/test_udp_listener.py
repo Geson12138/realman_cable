@@ -37,7 +37,7 @@ print("机械臂第一次连接", ip)
 
 # 设置要监听的 IP 和端口
 UDP_IP = "192.168.99.100"
-UDP_PORT = 8099
+UDP_PORT = 8090
 
 # 创建一个 UDP socket
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

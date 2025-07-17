@@ -16,11 +16,10 @@ if __name__=='__main__':
     arm_ri = Arm(75,byteIP_R)
     arm_le = Arm(75,byteIP_L)
 
-    # arm_le.Change_Tool_Frame('Arm_Tip')
-    arm_le.Change_Tool_Frame('Hand_Frame')
+    arm_le.Change_Tool_Frame('robotiq')
+    # arm_ri.Change_Tool_Frame('Arm_Tip')
+    # arm_ri.Change_Tool_Frame('Hand_Frame')
     arm_ri.Change_Tool_Frame('robotiq')
-    # arm_ri.Change_Tool_Frame('f_sensor')
-
     arm_le.Change_Work_Frame('Base')
     arm_ri.Change_Work_Frame('Base')
     
@@ -36,11 +35,11 @@ if __name__=='__main__':
     # ------------------pykin-------------------------------
     print('\n------------------pykin-------------------\n')
 
-    pykin_ri = SingleArm(f_name='./urdf/rm_75b_hand_gripper.urdf')
-    pykin_ri.setup_link_name('base_link', 'right_robotiq')
-
     pykin_le = SingleArm(f_name='./urdf/rm_75b_hand_gripper.urdf')
     pykin_le.setup_link_name('base_link', 'left_robotiq') 
+
+    pykin_ri = SingleArm(f_name='./urdf/rm_75b_hand_gripper.urdf')
+    pykin_ri.setup_link_name('base_link', 'right_robotiq')
 
     pykin_fsensor = SingleArm(f_name='./urdf/rm_75b_hand_gripper.urdf')
     pykin_fsensor.setup_link_name('base_link', 'f_sensor') # 力传感器坐标系

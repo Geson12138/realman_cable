@@ -2,7 +2,6 @@ import numpy as np
 from lib.robotic_arm import *
 from pykin.robots.single_arm import SingleArm
 import pykin.utils.transform_utils  as transform_utils
-import requests
 from include.predefine_pose import *
 import time
 import ikpy
@@ -24,6 +23,24 @@ if __name__=='__main__':
     arm_le.Change_Work_Frame('Base')
     arm_ri.Change_Work_Frame('Base')
 
-    step5_ri = [55.72, -83.69, -64.77, -31.44, -30.58, -82.46, 131.75]
-    arm_ri.Movej_Cmd(step5_ri,15)
+    # input("enter to continue")
+
+    pick_pre_le = [-45.15, 84.27, 64.16, 65.31, 21.57, 76.74, -94.29]
+    arm_le.Movej_Cmd(pick_pre_le,10) 
+
+    pick_pre_ri = [-0.64, 10.07, 7.63, -35.83, -4.98, -85.54, 26.24]
+    arm_ri.Movej_Cmd(pick_pre_ri,10)
+
+    step1_ri = [2.56, -59.42, 6.56, -36.24, -6.61, -87.46, 35.11]
+    arm_ri.Movej_Cmd(step1_ri,10)
+
+    input("enter to continue")
+
+    step1_le = [-31.72, 67.27, 55.5, 33.97, -50.26, 92.33, 11.29]
+    arm_le.Movej_Cmd(step1_le,10) 
+
+
+
+
+
     
